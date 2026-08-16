@@ -1,7 +1,7 @@
 const SPREADSHEET_ID = '1G_7dukgBGVF2gAyZvTQikjcHMfmmPsg7zQT2avHWPUU';
 const RESPONSE_SHEET = 'Responses';
 const FUNNEL_SHEET = 'Funnel';
-const APP_VERSION = '3.5.0';
+const DEFAULT_APP_VERSION = '3.5.0';
 
 const TYPE_ORDER = ['TR','TP','TG','RT','RP','RG','PT','PR','PG','GT','GR','GP'];
 const FUNNEL_EVENTS = ['page_view','start','question_progress','result_view','image_save','share_click','share_success','x_intent_open'];
@@ -28,6 +28,7 @@ function doPost(e) {
 function saveResponse_(data) {
   const type = normalizeType_(data.type);
   const answers = Array.isArray(data.answers) ? data.answers : [];
+  const appVersion = clean_(data.appVersion || DEFAULT_APP_VERSION, 32);
 
   if (TYPE_ORDER.indexOf(type) < 0) throw new Error('Invalid type');
   if (answers.length !== 22) throw new Error('Answers must contain 22 items');
@@ -42,7 +43,7 @@ function saveResponse_(data) {
     G: number_(scores.G),
     Primary: type.charAt(0),
     Secondary: type.charAt(1),
-    AppVersion: APP_VERSION,
+    AppVersion: appVersion,
     Type: type
   };
 
@@ -67,6 +68,7 @@ function saveResponse_(data) {
 
 function saveFunnel_(data) {
   const event = String(data.event || '').trim();
+  const appVersion = clean_(data.appVersion || DEFAULT_APP_VERSION, 32);
   if (FUNNEL_EVENTS.indexOf(event) < 0) throw new Error('Invalid funnel event');
 
   const sessionId = cleanSession_(data.sessionId);
@@ -100,7 +102,7 @@ function saveFunnel_(data) {
       source,
       type,
       questionIndex,
-      APP_VERSION,
+      appVersion,
       shareMethod,
       referrer,
       deviceClass,
