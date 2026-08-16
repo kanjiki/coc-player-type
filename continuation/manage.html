@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>継続先データ編集｜この自陣、次どこ行く？</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    .manage-wrap{width:min(1180px,calc(100% - 24px));margin:28px auto 60px}.manage-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}.manage-head h1{font-size:clamp(1.8rem,5vw,3rem);margin:.2rem 0}.manage-grid{display:grid;grid-template-columns:380px minmax(0,1fr);gap:18px}.side-list{max-height:68vh;overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff}.edge-item{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:#fff;padding:12px;cursor:pointer}.edge-item:last-child{border-bottom:0}.edge-item:hover,.edge-item.active{background:var(--soft)}.edge-item b{display:block}.edge-item span{font-size:.75rem;color:var(--muted)}.editor-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.editor-form .field{min-width:0}.editor-form .wide{grid-column:1/-1}.editor-form label{display:block;font-size:.82rem;font-weight:750;margin:0 0 5px}.editor-form textarea{min-height:100px}.manage-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.manage-actions .btn{width:auto}.danger-btn{background:var(--danger-bg);color:var(--danger)}.status-line{font-size:.84rem;color:var(--muted);margin:10px 0 0}.source-box{background:#f7f5f1;border-radius:14px;padding:15px;margin-bottom:16px}.source-box h2{font-size:1rem;margin:0 0 10px}.source-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:8px}.help{font-size:.82rem;color:var(--muted)}.publish-box{border-left:5px solid var(--accent);background:#f3f5f8}.publish-box h2{margin:0 0 8px;font-size:1.1rem}.publish-steps{margin:0;padding-left:1.25rem}.top-tools{display:flex;gap:8px;flex-wrap:wrap}.top-tools .btn{width:auto}.filter-row{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px}.count{font-size:.8rem;color:var(--muted);align-self:center}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.34);z-index:40;display:grid;place-items:center;padding:18px}.modal{width:min(760px,100%);max-height:85vh;overflow:auto;background:#fff;border-radius:18px;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.22)}.modal textarea{min-height:55vh;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.78rem}.modal-actions{display:flex;gap:8px;margin-top:10px}.modal-actions .btn{width:auto}@media(max-width:860px){.manage-grid{grid-template-columns:1fr}.side-list{max-height:300px}.manage-head{display:block}.top-tools{margin-top:12px}.source-grid,.editor-form{grid-template-columns:1fr}.editor-form .wide{grid-column:auto}.source-grid .btn{width:100%}}
+  </style>
+</head>
+<body>
+  <main class="manage-wrap">
+    <header class="manage-head">
+      <div>
+        <p class="eyebrow">OWNER EDITOR</p>
+        <h1>継続先データ編集</h1>
+        <p class="lead">候補を追加・修正し、更新済みの公開データを作る管理画面です。公開ページとは別URLです。</p>
+      </div>
+      <div class="top-tools">
+        <a class="btn secondary" href="./" target="_blank" rel="noopener">公開画面を確認</a>
+        <button class="btn secondary" id="restoreDraft" type="button">下書きを復元</button>
+      </div>
+    </header>
+
+    <section class="panel publish-box">
+      <h2>公開更新は3操作です</h2>
+      <ol class="publish-steps">
+        <li>下の編集後に「公開データをダウンロード」</li>
+        <li>「GitHubへアップロード」を開き、ダウンロードした <code>data-gzip.js</code> をドラッグ</li>
+        <li>緑の「Commit changes」を押す。同じ公開URLへ自動反映</li>
+      </ol>
+      <div class="manage-actions">
+        <button class="btn primary" id="downloadData" type="button">公開データをダウンロード</button>
+        <a class="btn secondary" id="uploadLink" href="https://github.com/kanjiki/coc-player-type/upload/main/continuation" target="_blank" rel="noopener">GitHubへアップロード</a>
+        <button class="btn secondary" id="showJson" type="button">JSONを確認</button>
+      </div>
+      <p class="status-line">管理画面だけでは公開データは変更されません。最後にGitHubへアップロードすると公開されます。</p>
+    </section>
+
+    <section class="panel source-box">
+      <h2>検索対象となる元シナリオを追加</h2>
+      <div class="source-grid">
+        <input id="newSource" type="text" placeholder="正式名称">
+        <input id="newAliases" type="text" placeholder="略称をカンマ区切り（例：庭師,にわし）">
+        <button class="btn secondary" id="addSource" type="button">元シナリオを追加</button>
+      </div>
+      <p class="help">既存の元シナリオは継続先を追加するときに選べます。追加後は自動保存されます。</p>
+    </section>
+
+    <div class="manage-grid">
+      <section class="panel">
+        <div class="filter-row">
+          <input id="edgeFilter" type="search" placeholder="元／継続先を検索">
+          <span class="count" id="edgeCount"></span>
+        </div>
+        <button class="btn primary" id="newEdge" type="button">新しい継続先を追加</button>
+        <div class="side-list" id="edgeList" aria-label="継続遷移一覧"></div>
+      </section>
+
+      <section class="panel">
+        <p class="step" id="editorMode">NEW EDGE</p>
+        <h2 id="editorTitle">継続先を追加</h2>
+        <form class="editor-form" id="edgeForm">
+          <div class="field">
+            <label for="sourceScenario">元シナリオ</label>
+            <select id="sourceScenario" required></select>
+          </div>
+          <div class="field">
+            <label for="targetScenario">継続先シナリオ</label>
+            <input id="targetScenario" type="text" required maxlength="160">
+          </div>
+          <div class="field">
+            <label for="scope">継続形態</label>
+            <select id="scope">
+              <option>自陣全員</option><option>自陣全員／複数人</option><option>複数人</option><option>ペア</option><option>1人／HO単位</option><option>指定なし</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="status">扱い</label>
+            <select id="status"><option>推薦</option><option>注意</option></select>
+          </div>
+          <div class="field">
+            <label for="grade">根拠等級</label>
+            <select id="grade"><option>S</option><option>A</option><option>B</option><option>C</option></select>
+          </div>
+          <div class="field">
+            <label for="evidenceType">根拠種別</label>
+            <input id="evidenceType" type="text" value="完走報告" maxlength="80">
+          </div>
+          <div class="field wide">
+            <label for="reason">推薦・注意理由</label>
+            <textarea id="reason" required maxlength="800" placeholder="何を確認し、なぜ候補にしたのか"></textarea>
+          </div>
+          <div class="field wide">
+            <label for="evidenceUrl">根拠URL</label>
+            <input id="evidenceUrl" type="url" required placeholder="https://...">
+          </div>
+          <div class="field">
+            <label for="granularity">URLの粒度</label>
+            <select id="granularity"><option value="status">個別投稿</option><option value="profile">プロフィール</option><option value="search">検索結果</option><option value="official">公式・作者ページ</option></select>
+          </div>
+          <div class="field">
+            <label for="verifiedOn">確認日</label>
+            <input id="verifiedOn" type="text" placeholder="2026-08-16">
+          </div>
+        </form>
+        <div class="manage-actions">
+          <button class="btn primary" id="saveEdge" type="button">保存</button>
+          <button class="btn secondary" id="duplicateEdge" type="button">複製</button>
+          <button class="btn danger-btn hidden" id="deleteEdge" type="button">削除</button>
+        </div>
+        <p class="status-line" id="editStatus">編集内容はこのブラウザの下書きへ自動保存されます。</p>
+      </section>
+    </div>
+  </main>
+
+  <div class="modal-backdrop hidden" id="jsonModal">
+    <div class="modal">
+      <h2>生成されるデータ内容</h2>
+      <textarea id="jsonText" readonly></textarea>
+      <div class="modal-actions"><button class="btn secondary" id="copyJson" type="button">コピー</button><button class="btn primary" id="closeJson" type="button">閉じる</button></div>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="./data-gzip.js"></script>
+  <script src="./manage.js"></script>
+</body>
+</html>
