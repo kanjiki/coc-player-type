@@ -2,161 +2,23 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>この自陣、次どこ行く？｜CoC継続先検索</title>
-  <meta name="description" content="通過したCoCシナリオを選ぶと、公開情報で確認した継続探索者の実例から次の候補を理由付きで表示します。">
-  <meta name="theme-color" content="#354254">
-  <meta property="og:title" content="この自陣、次どこ行く？">
-  <meta property="og:description" content="通過したシナリオから、実際に遊ばれた継続先を理由付きで探します。">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://kanjiki.github.io/coc-player-type/continuation/">
-  <meta name="twitter:card" content="summary">
-  <link rel="canonical" href="https://kanjiki.github.io/coc-player-type/continuation/">
-  <link rel="stylesheet" href="./styles.css">
-  <script defer src="./config.js"></script>
-  <script defer src="./data-gzip.js"></script>
-  <script defer src="./app.js"></script>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>移転しました｜この自陣、次どこ行く？</title>
+  <meta name="robots" content="noindex,follow">
+  <meta http-equiv="refresh" content="0; url=https://kanjiki.github.io/coc-continuation-finder/">
+  <link rel="canonical" href="https://kanjiki.github.io/coc-continuation-finder/">
+  <script>
+    (function(){
+      var base='https://kanjiki.github.io/coc-continuation-finder/';
+      var target=base + (location.search || '') + (location.hash || '');
+      location.replace(target);
+    })();
+  </script>
+  <style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;max-width:680px;margin:64px auto;padding:0 20px;line-height:1.8;color:#252525}a{color:#30465e}</style>
 </head>
 <body>
-  <div class="test-banner hidden" id="testBanner" role="status">
-    友人テスト版です。検索後、ページ下部の短いアンケートに回答してください。
-  </div>
-
-  <header class="hero">
-    <div class="wrap">
-      <p class="eyebrow">CoC CONTINUATION FINDER</p>
-      <h1>この自陣、<br>次どこ行く？</h1>
-      <p class="lead">通過したシナリオを一つ選ぶと、公開情報で確認した継続実例から、次の候補を理由付きで表示します。</p>
-      <div class="stats" id="stats" aria-label="収録データ概要"></div>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="panel search-panel" aria-labelledby="searchHeading">
-      <div class="section-heading">
-        <div>
-          <p class="step">STEP 1</p>
-          <h2 id="searchHeading">元シナリオを選ぶ</h2>
-        </div>
-        <p class="sub">正式名・略称のどちらでも検索できます。</p>
-      </div>
-
-      <div class="search-grid">
-        <div class="search-box">
-          <label class="sr-only" for="scenarioInput">元シナリオ</label>
-          <input id="scenarioInput" type="search" list="scenarioList" autocomplete="off" placeholder="例：VOID、庭師、四季送り">
-          <datalist id="scenarioList"></datalist>
-        </div>
-        <label class="sr-only" for="scopeFilter">継続形態</label>
-        <select id="scopeFilter">
-          <option value="">継続形態を問わない</option>
-          <option value="自陣全員">自陣全員・複数人</option>
-          <option value="ペア">ペア</option>
-          <option value="1人／HO単位">1人・HO単位</option>
-        </select>
-        <button class="btn primary" id="searchButton" type="button">候補を見る</button>
-      </div>
-
-      <div class="search-options">
-        <label class="check-row"><input type="checkbox" id="showCaution" checked> 注意事例も表示</label>
-        <span id="coverageText">検証版は20本の元シナリオに対応しています。</span>
-      </div>
-      <div class="quick" id="quickButtons" aria-label="検索例"></div>
-      <div class="match-suggestions hidden" id="matchSuggestions" aria-live="polite"></div>
-    </section>
-
-    <section class="panel results-panel" aria-labelledby="resultsHeading">
-      <div class="section-heading compact">
-        <div>
-          <p class="step">STEP 2</p>
-          <h2 id="resultsHeading">継続先候補</h2>
-        </div>
-        <p class="sub" id="resultSummary">元シナリオを選ぶと候補が表示されます。</p>
-      </div>
-      <div id="results" class="empty" aria-live="polite">
-        元シナリオを選ぶと、ここに理由付きの候補が表示されます。
-      </div>
-    </section>
-
-    <section class="panel feedback-panel hidden" id="feedbackPanel" aria-labelledby="feedbackHeading">
-      <div class="section-heading">
-        <div>
-          <p class="step">TEST FEEDBACK</p>
-          <h2 id="feedbackHeading">30秒アンケート</h2>
-        </div>
-        <p class="sub">候補の魅力ではなく、実際に次卓探しで使えるかを教えてください。</p>
-      </div>
-
-      <div class="feedback-grid">
-        <fieldset class="field full">
-          <legend>公開されたら使いたいですか？</legend>
-          <div class="radios">
-            <label class="radio-pill"><input name="intent" type="radio" value="ぜひ使いたい"><span>ぜひ使いたい</span></label>
-            <label class="radio-pill"><input name="intent" type="radio" value="条件次第"><span>条件次第</span></label>
-            <label class="radio-pill"><input name="intent" type="radio" value="使わない"><span>使わない</span></label>
-          </div>
-        </fieldset>
-
-        <div class="field">
-          <label for="usefulness">候補の役立ち度</label>
-          <select id="usefulness">
-            <option value="">選択してください</option>
-            <option value="1">1：役立たない</option>
-            <option value="2">2</option>
-            <option value="3">3：どちらともいえない</option>
-            <option value="4">4</option>
-            <option value="5">5：すぐ使えそう</option>
-          </select>
-        </div>
-
-        <fieldset class="field">
-          <legend>実際に調べたい候補がありましたか？</legend>
-          <div class="radios">
-            <label class="radio-pill"><input name="actionable" type="radio" value="はい"><span>はい</span></label>
-            <label class="radio-pill"><input name="actionable" type="radio" value="いいえ"><span>いいえ</span></label>
-          </div>
-        </fieldset>
-
-        <div class="field full">
-          <label for="missingCandidate">出てほしかった候補・不足情報 <span>任意</span></label>
-          <input id="missingCandidate" type="text" maxlength="160" placeholder="例：○○も候補に欲しい／人数や所要時間も見たい">
-        </div>
-
-        <div class="field full">
-          <label for="comment">率直なコメント <span>任意</span></label>
-          <textarea id="comment" rows="3" maxlength="500" placeholder="迷った場所、使わない理由、余計だと思う機能など"></textarea>
-        </div>
-      </div>
-
-      <div class="feedback-actions">
-        <button class="btn primary" id="sendFeedback" type="button">回答を送る</button>
-        <p class="feedback-note" id="feedbackNote">送信ボタンで共有画面を開きます。共有できないPCでは回答文をコピーします。</p>
-      </div>
-      <div class="share-fallback hidden" id="shareFallback">
-        <label for="feedbackText">下の回答文をコピーして、Discordなどで依頼者へ送ってください。</label>
-        <textarea id="feedbackText" rows="9" readonly></textarea>
-        <button class="btn secondary" id="copyFeedback" type="button">回答文をコピー</button>
-      </div>
-    </section>
-
-    <section class="panel about-panel" aria-labelledby="aboutHeading">
-      <h2 id="aboutHeading">表示の読み方</h2>
-      <div class="legend" id="legend"></div>
-      <details>
-        <summary>このツールの限界と注意</summary>
-        <ul id="limitations"></ul>
-      </details>
-      <p class="legal-note">実卓例は適合を保証するものではありません。人数、継続可否、版、センシティブ要素、作者の利用条件は必ず配布・販売元で確認してください。</p>
-    </section>
-  </main>
-
-  <footer>
-    <div class="wrap footer-inner">
-      <p>非公式ツール。シナリオ本文・ネタバレ・探索者名は収録していません。</p>
-      <p id="versionLabel"></p>
-    </div>
-  </footer>
-
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <h1>移転しました</h1>
+  <p>「この自陣、次どこ行く？」は専用リポジトリへ移転しました。</p>
+  <p><a href="https://kanjiki.github.io/coc-continuation-finder/">新しいサイトを開く</a></p>
 </body>
 </html>
