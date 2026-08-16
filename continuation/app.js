@@ -35,6 +35,8 @@
     try {
       if (window.CONTINUATION_DATA) {
         state.data = window.CONTINUATION_DATA;
+      } else if (window.CONTINUATION_DATA_GZIP) {
+        state.data = await decodeGzipJson(window.CONTINUATION_DATA_GZIP);
       } else {
         const response = await fetch(CONFIG.dataUrl || './data.json', { cache: 'no-store' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -48,6 +50,17 @@
       $('#results').textContent = 'データを読み込めませんでした。ページを再読み込みしてください。';
       toast('データの読み込みに失敗しました');
     }
+  }
+
+  async function decodeGzipJson(base64) {
+    if (typeof DecompressionStream !== 'function') {
+      throw new Error('このブラウザは圧縮データの展開に対応していません');
+    }
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const text = await new Response(stream).text();
+    return JSON.parse(text);
   }
 
   function setModeUI() {
@@ -187,7 +200,7 @@
     const maxResults = Number(CONFIG.maxResults) || 10;
 
     let items = state.data.transitions.filter(item => item.source_scenario === source);
-    if (scope) items = items.filter(item => item.continuation_scope === scope);
+    if (scope) items = items.filter(item => matchesScope(item.continuation_scope, scope));
     if (!showCaution) items = items.filter(item => item.status !== '注意');
 
     items.sort((a, b) => {
@@ -225,6 +238,14 @@
     $$('#results [data-evidence]').forEach(link => {
       link.addEventListener('click', () => { state.evidenceOpened = true; });
     });
+  }
+
+  function matchesScope(rawScope, category) {
+    const value = String(rawScope || '');
+    if (category === 'group' || category === '自陣全員') return value.includes('自陣全員') || value.includes('複数人');
+    if (category === 'pair' || category === 'ペア') return value.includes('ペア');
+    if (category === 'solo' || category === '1人／HO単位') return value.includes('1人') || value.includes('HO単位');
+    return true;
   }
 
   function resultCard(item, index) {
