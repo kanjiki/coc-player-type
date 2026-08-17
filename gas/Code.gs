@@ -4,7 +4,7 @@ const FUNNEL_SHEET = 'Funnel';
 const DEFAULT_APP_VERSION = '3.5.0';
 
 const TYPE_ORDER = ['TR','TP','TG','RT','RP','RG','PT','PR','PG','GT','GR','GP'];
-const FUNNEL_EVENTS = ['page_view','start','question_progress','result_view','image_save','share_click','share_success','x_intent_open'];
+const FUNNEL_EVENTS = ['page_view','start','question_progress','result_view','response_saved','image_save','share_click','share_success','x_intent_open'];
 
 function doPost(e) {
   try {
@@ -33,9 +33,15 @@ function saveResponse_(data) {
   if (TYPE_ORDER.indexOf(type) < 0) throw new Error('Invalid type');
   if (answers.length !== 22) throw new Error('Answers must contain 22 items');
 
+  const suppliedSessionId = cleanSession_(data.sessionId);
+  const sessionId = suppliedSessionId || ('resp_' + Utilities.getUuid().replace(/-/g, ''));
+  const source = oneOf_(String(data.source || '').toLowerCase(), ['direct','x','other'], 'other');
+  const deviceClass = oneOf_(String(data.deviceClass || '').toLowerCase(), ['mobile','desktop','other'], 'other');
+  const referrer = referrerHost_(data.referrer);
+  const now = new Date();
   const scores = data.scores || {};
   const values = {
-    Timestamp: new Date(),
+    Timestamp: now,
     Name: clean_(data.name, 80),
     T: number_(scores.T),
     R: number_(scores.R),
@@ -44,7 +50,8 @@ function saveResponse_(data) {
     Primary: type.charAt(0),
     Secondary: type.charAt(1),
     AppVersion: appVersion,
-    Type: type
+    Type: type,
+    SessionId: sessionId
   };
 
   for (let i = 0; i < 22; i++) {
@@ -55,12 +62,35 @@ function saveResponse_(data) {
   lock.waitLock(10000);
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(RESPONSE_SHEET);
-    if (!sheet) throw new Error('Responses sheet not found');
+    const responseSheet = ss.getSheetByName(RESPONSE_SHEET);
+    if (!responseSheet) throw new Error('Responses sheet not found');
 
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+    let funnelSheet = ss.getSheetByName(FUNNEL_SHEET);
+    if (!funnelSheet) {
+      funnelSheet = ss.insertSheet(FUNNEL_SHEET);
+      funnelSheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
+      funnelSheet.setFrozenRows(1);
+    }
+
+    const headers = responseSheet.getRange(1, 1, 1, responseSheet.getLastColumn()).getDisplayValues()[0];
     const row = headers.map(h => Object.prototype.hasOwnProperty.call(values, h) ? values[h] : '');
-    sheet.appendRow(row);
+
+    // Canonical completion: both writes happen under the same lock and share the same timestamp/session.
+    responseSheet.appendRow(row);
+    funnelSheet.appendRow([
+      now,
+      sessionId,
+      'response_saved',
+      source,
+      type,
+      22,
+      appVersion,
+      '',
+      referrer,
+      deviceClass,
+      true,
+      suppliedSessionId ? 'saved_with_response' : 'saved_with_response_synthetic_session'
+    ]);
   } finally {
     lock.releaseLock();
   }
