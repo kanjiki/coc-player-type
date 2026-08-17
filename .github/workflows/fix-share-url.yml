@@ -17,49 +17,49 @@ jobs:
         with:
           ref: main
 
-      - name: Patch share behavior
+      - name: Patch share behavior and response metadata
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('index.html')
-          s = p.read_text(encoding='utf-8')
 
-          old = "function shareText(){const r=resultData,who=r.name?r.name+'さんの':'私の';return who+'CoCプレイヤータイプは【'+r.nickname+'（'+r.type+'）】でした！\\nあなたは何型？\\n#CoCプレイヤー診断 #クトゥルフ神話TRPG'}"
-          new = "function shareText(){const r=resultData,who=r.name?r.name+'さんの':'私の';return who+'CoCプレイヤータイプは【'+r.nickname+'（'+r.type+'）】でした！\\nあなたは何型？\\n'+SITE_URL+'?src=x\\n#CoCプレイヤー診断 #クトゥルフ神話TRPG'}"
-          if old not in s:
-              raise SystemExit('shareText pattern not found')
-          s = s.replace(old, new, 1)
+          for filename in ['index.html', 'v36/index.html']:
+              p = Path(filename)
+              s = p.read_text(encoding='utf-8')
 
-          s = s.replace("text:shareText(),url:SITE_URL,files:[file]", "text:shareText(),files:[file]")
+              old = "function shareText(){const r=resultData,who=r.name?r.name+'さんの':'私の';return who+'CoCプレイヤータイプは【'+r.nickname+'（'+r.type+'）】でした！\\nあなたは何型？\\n#CoCプレイヤー診断 #クトゥルフ神話TRPG'}"
+              new = "function shareText(){const r=resultData,who=r.name?r.name+'さんの':'私の';return who+'CoCプレイヤータイプは【'+r.nickname+'（'+r.type+'）】でした！\\nあなたは何型？\\n'+SITE_URL+'?src=x\\n#CoCプレイヤー診断 #クトゥルフ神話TRPG'}"
+              if old in s:
+                  s = s.replace(old, new, 1)
 
-          old_intent = "const url='https://twitter.com/intent/tweet?text='+encodeURIComponent(shareText())+'&url='+encodeURIComponent(SITE_URL+'?src=x'),opened=window.open(url,'_blank','noopener,noreferrer');"
-          new_intent = "const url='https://twitter.com/intent/tweet?text='+encodeURIComponent(shareText()),opened=window.open(url,'_blank','noopener,noreferrer');"
-          if old_intent not in s:
-              raise SystemExit('X intent pattern not found')
-          s = s.replace(old_intent, new_intent, 1)
+              s = s.replace("text:shareText(),url:SITE_URL,files:[file]", "text:shareText(),files:[file]")
 
-          old_copy = "navigator.clipboard.writeText(shareText()+'\\n'+SITE_URL)"
-          new_copy = "navigator.clipboard.writeText(shareText())"
-          if old_copy not in s:
-              raise SystemExit('copy pattern not found')
-          s = s.replace(old_copy, new_copy, 1)
+              old_intent = "const url='https://twitter.com/intent/tweet?text='+encodeURIComponent(shareText())+'&url='+encodeURIComponent(SITE_URL+'?src=x'),opened=window.open(url,'_blank','noopener,noreferrer');"
+              new_intent = "const url='https://twitter.com/intent/tweet?text='+encodeURIComponent(shareText()),opened=window.open(url,'_blank','noopener,noreferrer');"
+              if old_intent in s:
+                  s = s.replace(old_intent, new_intent, 1)
 
-          old_page = "document.addEventListener('DOMContentLoaded',()=>logFunnel('page_view'));"
-          new_page = "document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>logFunnel('page_view'),700));"
-          if old_page in s:
-              s = s.replace(old_page, new_page, 1)
+              s = s.replace("navigator.clipboard.writeText(shareText()+'\\n'+SITE_URL)", "navigator.clipboard.writeText(shareText())")
+              s = s.replace("document.addEventListener('DOMContentLoaded',()=>logFunnel('page_view'));", "document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>logFunnel('page_view'),700));")
 
-          p.write_text(s, encoding='utf-8')
+              old_save = "function saveToSheet(){postToGas('saveResponse',{appVersion:APP_VERSION,name:resultData.name,type:resultData.type,scores:resultData.scores,answers:answers.map(i=>String.fromCharCode(65+i))});el('same').textContent='回答を集計へ送信しました。'}"
+              new_save = "function saveToSheet(){postToGas('saveResponse',{appVersion:APP_VERSION,sessionId,source:detectSource(),referrer:document.referrer||'',deviceClass:deviceClass(),name:resultData.name,type:resultData.type,scores:resultData.scores,answers:answers.map(i=>String.fromCharCode(65+i))});el('same').textContent='回答を集計へ送信しました。'}"
+              if old_save not in s:
+                  if new_save not in s:
+                      raise SystemExit(f'saveToSheet pattern not found in {filename}')
+              else:
+                  s = s.replace(old_save, new_save, 1)
+
+              p.write_text(s, encoding='utf-8')
           PY
 
       - name: Commit patch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html
+          git add index.html v36/index.html
           if git diff --cached --quiet; then
             echo "No changes needed"
             exit 0
           fi
-          git commit -m "Ensure X shares include diagnosis URL"
+          git commit -m "Pass session metadata with saved responses"
           git push origin main
