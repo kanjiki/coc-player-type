@@ -14,6 +14,8 @@ function doPost(e) {
       saveResponse_(payload.data || {});
     } else if (payload.action === 'funnel') {
       saveFunnel_(payload.data || {});
+    } else if (payload.action === 'funnelBatch') {
+      saveFunnelBatch_(Array.isArray(payload.data) ? payload.data : []);
     } else {
       throw new Error('Unknown action');
     }
@@ -58,26 +60,23 @@ function saveResponse_(data) {
     values['Q' + (i + 1)] = normalizeAnswer_(answers[i]);
   }
 
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const responseSheet = ss.getSheetByName(RESPONSE_SHEET);
+  if (!responseSheet) throw new Error('Responses sheet not found');
+  let funnelSheet = ss.getSheetByName(FUNNEL_SHEET);
+  if (!funnelSheet) {
+    funnelSheet = ss.insertSheet(FUNNEL_SHEET);
+    funnelSheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
+    funnelSheet.setFrozenRows(1);
+  }
+  const headers = responseSheet.getRange(1, 1, 1, responseSheet.getLastColumn()).getDisplayValues()[0];
+  const row = headers.map(h => Object.prototype.hasOwnProperty.call(values, h) ? values[h] : '');
+
   const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  lock.waitLock(15000);
   try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const responseSheet = ss.getSheetByName(RESPONSE_SHEET);
-    if (!responseSheet) throw new Error('Responses sheet not found');
-
-    let funnelSheet = ss.getSheetByName(FUNNEL_SHEET);
-    if (!funnelSheet) {
-      funnelSheet = ss.insertSheet(FUNNEL_SHEET);
-      funnelSheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
-      funnelSheet.setFrozenRows(1);
-    }
-
-    const headers = responseSheet.getRange(1, 1, 1, responseSheet.getLastColumn()).getDisplayValues()[0];
-    const row = headers.map(h => Object.prototype.hasOwnProperty.call(values, h) ? values[h] : '');
-
-    // Canonical completion: both writes happen under the same lock and share the same timestamp/session.
-    responseSheet.appendRow(row);
-    funnelSheet.appendRow([
+    responseSheet.getRange(responseSheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+    funnelSheet.getRange(funnelSheet.getLastRow() + 1, 1, 1, 12).setValues([[
       now,
       sessionId,
       'response_saved',
@@ -90,13 +89,61 @@ function saveResponse_(data) {
       deviceClass,
       true,
       suppliedSessionId ? 'saved_with_response' : 'saved_with_response_synthetic_session'
-    ]);
+    ]]);
   } finally {
     lock.releaseLock();
   }
 }
 
 function saveFunnel_(data) {
+  saveFunnelBatch_([data]);
+}
+
+function saveFunnelBatch_(items) {
+  if (!Array.isArray(items)) throw new Error('Invalid funnel batch');
+  const batch = items.slice(0, 50);
+  if (!batch.length) return;
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(FUNNEL_SHEET);
+  if (!sheet) {
+    const setupLock = LockService.getScriptLock();
+    setupLock.waitLock(15000);
+    try {
+      sheet = ss.getSheetByName(FUNNEL_SHEET);
+      if (!sheet) {
+        sheet = ss.insertSheet(FUNNEL_SHEET);
+        sheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
+        sheet.setFrozenRows(1);
+      }
+    } finally {
+      setupLock.releaseLock();
+    }
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const cache = CacheService.getScriptCache();
+    const now = new Date();
+    const rows = [];
+    batch.forEach(function(data) {
+      try {
+        const row = normalizeFunnelRow_(data || {}, now, cache);
+        if (row) rows.push(row);
+      } catch (err) {
+        console.error('Skipped invalid funnel event', err);
+      }
+    });
+    if (!rows.length) return;
+    const firstRow = sheet.getLastRow() + 1;
+    sheet.getRange(firstRow, 1, rows.length, 12).setValues(rows);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function normalizeFunnelRow_(data, serverNow, cache) {
   const event = String(data.event || '').trim();
   const appVersion = clean_(data.appVersion || DEFAULT_APP_VERSION, 32);
   if (FUNNEL_EVENTS.indexOf(event) < 0) throw new Error('Invalid funnel event');
@@ -113,35 +160,22 @@ function saveFunnel_(data) {
   const referrer = referrerHost_(data.referrer);
   const note = clean_(data.note, 120);
 
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    let sheet = ss.getSheetByName(FUNNEL_SHEET);
-
-    if (!sheet) {
-      sheet = ss.insertSheet(FUNNEL_SHEET);
-      sheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
-      sheet.setFrozenRows(1);
-    }
-
-    sheet.appendRow([
-      new Date(),
-      sessionId,
-      event,
-      source,
-      type,
-      questionIndex,
-      appVersion,
-      shareMethod,
-      referrer,
-      deviceClass,
-      success,
-      note
-    ]);
-  } finally {
-    lock.releaseLock();
+  if (event === 'page_view' || event === 'start' || event === 'result_view' || event === 'question_progress') {
+    const dedupeKey = ['f2', appVersion, sessionId, event, questionIndex].join('|');
+    if (cache.get(dedupeKey)) return null;
+    cache.put(dedupeKey, '1', 21600);
   }
+
+  let timestamp = serverNow;
+  const clientTs = Number(data.clientTs);
+  if (Number.isFinite(clientTs)) {
+    const candidate = new Date(clientTs);
+    if (!isNaN(candidate.getTime()) && Math.abs(serverNow.getTime() - candidate.getTime()) <= 86400000) {
+      timestamp = candidate;
+    }
+  }
+
+  return [timestamp, sessionId, event, source, type, questionIndex, appVersion, shareMethod, referrer, deviceClass, success, note];
 }
 
 function normalizeType_(value) {
