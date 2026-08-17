@@ -1,0 +1,172 @@
+name: Fix response funnel sync
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-response-funnel-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch GAS and clients
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # --- GAS: save Responses + response_saved atomically under one lock ---
+          p = Path('gas/Code.gs')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              "const FUNNEL_EVENTS = ['page_view','start','question_progress','result_view','image_save','share_click','share_success','x_intent_open'];",
+              "const FUNNEL_EVENTS = ['page_view','start','question_progress','result_view','response_saved','image_save','share_click','share_success','x_intent_open'];"
+          )
+
+          old = """function saveResponse_(data) {
+  const type = normalizeType_(data.type);
+  const answers = Array.isArray(data.answers) ? data.answers : [];
+  const appVersion = clean_(data.appVersion || DEFAULT_APP_VERSION, 32);
+
+  if (TYPE_ORDER.indexOf(type) < 0) throw new Error('Invalid type');
+  if (answers.length !== 22) throw new Error('Answers must contain 22 items');
+
+  const scores = data.scores || {};
+  const values = {
+    Timestamp: new Date(),
+    Name: clean_(data.name, 80),
+    T: number_(scores.T),
+    R: number_(scores.R),
+    P: number_(scores.P),
+    G: number_(scores.G),
+    Primary: type.charAt(0),
+    Secondary: type.charAt(1),
+    AppVersion: appVersion,
+    Type: type
+  };
+
+  for (let i = 0; i < 22; i++) {
+    values['Q' + (i + 1)] = normalizeAnswer_(answers[i]);
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(RESPONSE_SHEET);
+    if (!sheet) throw new Error('Responses sheet not found');
+
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+    const row = headers.map(h => Object.prototype.hasOwnProperty.call(values, h) ? values[h] : '');
+    sheet.appendRow(row);
+  } finally {
+    lock.releaseLock();
+  }
+}
+"""
+
+          new = """function saveResponse_(data) {
+  const type = normalizeType_(data.type);
+  const answers = Array.isArray(data.answers) ? data.answers : [];
+  const appVersion = clean_(data.appVersion || DEFAULT_APP_VERSION, 32);
+
+  if (TYPE_ORDER.indexOf(type) < 0) throw new Error('Invalid type');
+  if (answers.length !== 22) throw new Error('Answers must contain 22 items');
+
+  const suppliedSessionId = cleanSession_(data.sessionId);
+  const sessionId = suppliedSessionId || ('resp_' + Utilities.getUuid().replace(/-/g, ''));
+  const source = oneOf_(String(data.source || '').toLowerCase(), ['direct','x','other'], 'other');
+  const deviceClass = oneOf_(String(data.deviceClass || '').toLowerCase(), ['mobile','desktop','other'], 'other');
+  const referrer = referrerHost_(data.referrer);
+  const now = new Date();
+  const scores = data.scores || {};
+  const values = {
+    Timestamp: now,
+    Name: clean_(data.name, 80),
+    T: number_(scores.T),
+    R: number_(scores.R),
+    P: number_(scores.P),
+    G: number_(scores.G),
+    Primary: type.charAt(0),
+    Secondary: type.charAt(1),
+    AppVersion: appVersion,
+    Type: type,
+    SessionId: sessionId
+  };
+
+  for (let i = 0; i < 22; i++) {
+    values['Q' + (i + 1)] = normalizeAnswer_(answers[i]);
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const responseSheet = ss.getSheetByName(RESPONSE_SHEET);
+    if (!responseSheet) throw new Error('Responses sheet not found');
+
+    let funnelSheet = ss.getSheetByName(FUNNEL_SHEET);
+    if (!funnelSheet) {
+      funnelSheet = ss.insertSheet(FUNNEL_SHEET);
+      funnelSheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
+      funnelSheet.setFrozenRows(1);
+    }
+
+    const headers = responseSheet.getRange(1, 1, 1, responseSheet.getLastColumn()).getDisplayValues()[0];
+    const row = headers.map(h => Object.prototype.hasOwnProperty.call(values, h) ? values[h] : '');
+
+    // Keep both writes inside the same script lock. response_saved is the canonical completion event.
+    responseSheet.appendRow(row);
+    funnelSheet.appendRow([
+      now,
+      sessionId,
+      'response_saved',
+      source,
+      type,
+      22,
+      appVersion,
+      '',
+      referrer,
+      deviceClass,
+      true,
+      suppliedSessionId ? 'saved_with_response' : 'saved_with_response_synthetic_session'
+    ]);
+  } finally {
+    lock.releaseLock();
+  }
+}
+"""
+          if old not in s:
+              raise SystemExit('saveResponse_ pattern not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # --- Clients: pass the same session metadata to saveResponse ---
+          for path in [Path('v36/index.html'), Path('index.html')]:
+              s = path.read_text(encoding='utf-8')
+              old = "function saveToSheet(){postToGas('saveResponse',{appVersion:APP_VERSION,name:resultData.name,type:resultData.type,scores:resultData.scores,answers:answers.map(i=>String.fromCharCode(65+i))});el('same').textContent='回答を集計へ送信しました。'}"
+              new = "function saveToSheet(){postToGas('saveResponse',{appVersion:APP_VERSION,sessionId,source:detectSource(),referrer:document.referrer||'',deviceClass:deviceClass(),name:resultData.name,type:resultData.type,scores:resultData.scores,answers:answers.map(i=>String.fromCharCode(65+i))});el('same').textContent='回答を集計へ送信しました。'}"
+              if old not in s:
+                  raise SystemExit(f'saveToSheet pattern not found in {path}')
+              s = s.replace(old, new, 1)
+              path.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gas/Code.gs v36/index.html index.html
+          if git diff --cached --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git commit -m "Synchronize saved responses with funnel completion"
+          git push origin main
