@@ -1,0 +1,261 @@
+name: Improve funnel reliability
+
+on:
+  push:
+    paths:
+      - '.github/workflows/improve-funnel-reliability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch client and GAS source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          analytics = r'''function postPayload(action,data,preferBeacon=false){const form=new URLSearchParams();form.set('payload',JSON.stringify({action,data}));const body=form.toString();if(preferBeacon&&navigator.sendBeacon){try{const ok=navigator.sendBeacon(GAS_API_URL,new Blob([body],{type:'application/x-www-form-urlencoded;charset=UTF-8'}));if(ok)return Promise.resolve(true)}catch(e){}}return fetch(GAS_API_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body,keepalive:true}).then(()=>true).catch(()=>false)}
+function postToGas(action,data){return postPayload(action,data,false)}
+const FUNNEL_QUEUE_KEY='coc_diag_funnel_queue_v2';let funnelQueue=[],funnelFlushTimer=null;try{const saved=JSON.parse(localStorage.getItem(FUNNEL_QUEUE_KEY)||'[]');if(Array.isArray(saved))funnelQueue=saved.slice(-80)}catch(e){}
+function persistFunnelQueue(){try{localStorage.setItem(FUNNEL_QUEUE_KEY,JSON.stringify(funnelQueue.slice(-80)))}catch(e){}}
+function scheduleFunnelFlush(delay=600){if(funnelFlushTimer)return;funnelFlushTimer=setTimeout(()=>{funnelFlushTimer=null;flushFunnelQueue(false)},delay)}
+async function flushFunnelQueue(preferBeacon=false){if(!funnelQueue.length)return true;const batch=funnelQueue.splice(0,25);persistFunnelQueue();const ok=await postPayload('funnelBatch',batch,preferBeacon);if(!ok){funnelQueue=batch.concat(funnelQueue).slice(-80);persistFunnelQueue()}if(funnelQueue.length&&!preferBeacon)scheduleFunnelFlush(800);return ok}
+function logFunnel(event,extra={}){const item={appVersion:APP_VERSION,sessionId,event,source:detectSource(),type:resultData?resultData.type:'',questionIndex:extra.questionIndex==null?'':extra.questionIndex,shareMethod:extra.shareMethod||'',referrer:document.referrer||'',deviceClass:deviceClass(),success:typeof extra.success==='boolean'?extra.success:'',note:extra.note||'',clientTs:Date.now()};const once=['page_view','start','result_view','question_progress'];if(once.includes(event)){const key=event+'|'+(item.questionIndex||'');if(funnelQueue.some(x=>x&&x.sessionId===sessionId&&(x.event+'|'+(x.questionIndex||''))===key))return}funnelQueue.push(item);persistFunnelQueue();scheduleFunnelFlush(['page_view','start','result_view'].includes(event)?80:600)}'''
+
+          for rel in ['index.html','v36/index.html']:
+              p=Path(rel)
+              if not p.exists():
+                  continue
+              s=p.read_text(encoding='utf-8')
+              start=s.index('function postToGas(action,data){')
+              end=s.index('function startDiagnosis(){',start)
+              s=s[:start]+analytics+'\n'+s[end:]
+              old="document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>logFunnel('page_view'),700));"
+              new="document.addEventListener('DOMContentLoaded',()=>{logFunnel('page_view');setTimeout(()=>flushFunnelQueue(false),120)});window.addEventListener('pagehide',()=>flushFunnelQueue(true));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushFunnelQueue(true)});"
+              if old not in s:
+                  raise SystemExit(f'{rel}: page_view initializer not found')
+              s=s.replace(old,new,1)
+              p.write_text(s,encoding='utf-8')
+
+          gp=Path('gas/Code.gs')
+          g=gp.read_text(encoding='utf-8')
+          g=g.replace("    } else if (payload.action === 'funnel') {\n      saveFunnel_(payload.data || {});\n    } else {", "    } else if (payload.action === 'funnel') {\n      saveFunnel_(payload.data || {});\n    } else if (payload.action === 'funnelBatch') {\n      saveFunnelBatch_(Array.isArray(payload.data) ? payload.data : []);\n    } else {",1)
+
+          fstart=g.index('function saveFunnel_(data) {')
+          fend=g.index('function normalizeType_(value) {',fstart)
+          replacement=r'''function saveFunnel_(data) {
+  saveFunnelBatch_([data]);
+}
+
+function saveFunnelBatch_(items) {
+  if (!Array.isArray(items)) throw new Error('Invalid funnel batch');
+  const batch = items.slice(0, 50);
+  if (!batch.length) return;
+
+  // Opening the spreadsheet is relatively expensive. Do it before taking the
+  // script lock so concurrent executions spend less time blocking each other.
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(FUNNEL_SHEET);
+  if (!sheet) {
+    const setupLock = LockService.getScriptLock();
+    setupLock.waitLock(15000);
+    try {
+      sheet = ss.getSheetByName(FUNNEL_SHEET);
+      if (!sheet) {
+        sheet = ss.insertSheet(FUNNEL_SHEET);
+        sheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
+        sheet.setFrozenRows(1);
+      }
+    } finally {
+      setupLock.releaseLock();
+    }
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const cache = CacheService.getScriptCache();
+    const now = new Date();
+    const rows = [];
+    batch.forEach(function(data) {
+      try {
+        const row = normalizeFunnelRow_(data || {}, now, cache);
+        if (row) rows.push(row);
+      } catch (err) {
+        console.error('Skipped invalid funnel event', err);
+      }
+    });
+    if (!rows.length) return;
+    const firstRow = sheet.getLastRow() + 1;
+    sheet.getRange(firstRow, 1, rows.length, 12).setValues(rows);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function normalizeFunnelRow_(data, serverNow, cache) {
+  const event = String(data.event || '').trim();
+  const appVersion = clean_(data.appVersion || DEFAULT_APP_VERSION, 32);
+  if (FUNNEL_EVENTS.indexOf(event) < 0) throw new Error('Invalid funnel event');
+
+  const sessionId = cleanSession_(data.sessionId);
+  if (!sessionId) throw new Error('Invalid session id');
+
+  const type = normalizeType_(data.type);
+  const questionIndex = clampQuestion_(data.questionIndex);
+  const source = oneOf_(String(data.source || '').toLowerCase(), ['direct','x','other'], 'other');
+  const shareMethod = oneOf_(String(data.shareMethod || '').toLowerCase(), ['web_share','x_intent','download'], '');
+  const deviceClass = oneOf_(String(data.deviceClass || '').toLowerCase(), ['mobile','desktop','other'], 'other');
+  const success = data.success === true ? true : data.success === false ? false : '';
+  const referrer = referrerHost_(data.referrer);
+  const note = clean_(data.note, 120);
+
+  // Repeated delivery is intentional for reliability. De-duplicate only the
+  // session-level funnel milestones; repeated share actions remain countable.
+  if (event === 'page_view' || event === 'start' || event === 'result_view' || event === 'question_progress') {
+    const dedupeKey = ['f2', appVersion, sessionId, event, questionIndex].join('|');
+    if (cache.get(dedupeKey)) return null;
+    cache.put(dedupeKey, '1', 21600);
+  }
+
+  let timestamp = serverNow;
+  const clientTs = Number(data.clientTs);
+  if (Number.isFinite(clientTs)) {
+    const candidate = new Date(clientTs);
+    if (!isNaN(candidate.getTime()) && Math.abs(serverNow.getTime() - candidate.getTime()) <= 86400000) {
+      timestamp = candidate;
+    }
+  }
+
+  return [
+    timestamp,
+    sessionId,
+    event,
+    source,
+    type,
+    questionIndex,
+    appVersion,
+    shareMethod,
+    referrer,
+    deviceClass,
+    success,
+    note
+  ];
+}
+
+'''
+          g=g[:fstart]+replacement+g[fend:]
+
+          # Keep the response save atomic, but shorten the lock's expensive work.
+          old="""  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const responseSheet = ss.getSheetByName(RESPONSE_SHEET);
+    if (!responseSheet) throw new Error('Responses sheet not found');
+
+    let funnelSheet = ss.getSheetByName(FUNNEL_SHEET);
+    if (!funnelSheet) {
+      funnelSheet = ss.insertSheet(FUNNEL_SHEET);
+      funnelSheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
+      funnelSheet.setFrozenRows(1);
+    }
+
+    const headers = responseSheet.getRange(1, 1, 1, responseSheet.getLastColumn()).getDisplayValues()[0];
+    const row = headers.map(h => Object.prototype.hasOwnProperty.call(values, h) ? values[h] : '');
+
+    // Canonical completion: both writes happen under the same lock and share the same timestamp/session.
+    responseSheet.appendRow(row);
+    funnelSheet.appendRow([
+      now,
+      sessionId,
+      'response_saved',
+      source,
+      type,
+      22,
+      appVersion,
+      '',
+      referrer,
+      deviceClass,
+      true,
+      suppliedSessionId ? 'saved_with_response' : 'saved_with_response_synthetic_session'
+    ]);
+  } finally {
+    lock.releaseLock();
+  }
+"""
+          new="""  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const responseSheet = ss.getSheetByName(RESPONSE_SHEET);
+  if (!responseSheet) throw new Error('Responses sheet not found');
+  let funnelSheet = ss.getSheetByName(FUNNEL_SHEET);
+  if (!funnelSheet) {
+    funnelSheet = ss.insertSheet(FUNNEL_SHEET);
+    funnelSheet.appendRow(['timestamp','session_id','event','source','type','question_index','app_version','share_method','referrer','device_class','success','note']);
+    funnelSheet.setFrozenRows(1);
+  }
+  const headers = responseSheet.getRange(1, 1, 1, responseSheet.getLastColumn()).getDisplayValues()[0];
+  const row = headers.map(h => Object.prototype.hasOwnProperty.call(values, h) ? values[h] : '');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    responseSheet.getRange(responseSheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+    funnelSheet.getRange(funnelSheet.getLastRow() + 1, 1, 1, 12).setValues([[
+      now,
+      sessionId,
+      'response_saved',
+      source,
+      type,
+      22,
+      appVersion,
+      '',
+      referrer,
+      deviceClass,
+      true,
+      suppliedSessionId ? 'saved_with_response' : 'saved_with_response_synthetic_session'
+    ]]);
+  } finally {
+    lock.releaseLock();
+  }
+"""
+          if old not in g:
+              raise SystemExit('saveResponse block not found')
+          g=g.replace(old,new,1)
+          gp.write_text(g,encoding='utf-8')
+          PY
+
+      - name: Validate patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for rel in ['index.html','v36/index.html']:
+            s=Path(rel).read_text(encoding='utf-8')
+            assert "funnelBatch" in s
+            assert "clientTs:Date.now()" in s
+            assert "pagehide" in s
+            assert "setTimeout(()=>logFunnel('page_view'),700)" not in s
+          g=Path('gas/Code.gs').read_text(encoding='utf-8')
+          assert "payload.action === 'funnelBatch'" in g
+          assert 'saveFunnelBatch_' in g
+          assert 'normalizeFunnelRow_' in g
+          assert '.setValues(rows)' in g
+          print('funnel reliability patch validated')
+          PY
+
+      - name: Commit upgrade and remove one-shot workflow
+        run: |
+          rm .github/workflows/improve-funnel-reliability.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html v36/index.html gas/Code.gs .github/workflows/improve-funnel-reliability.yml
+          git commit -m "Improve funnel logging reliability"
+          git push origin main
