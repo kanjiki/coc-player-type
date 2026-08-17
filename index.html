@@ -44,7 +44,7 @@
 </main>
 <footer class="site-footer"><a href="https://kanjiki.github.io/kanjiki-HP/" target="_blank" rel="noopener noreferrer">つまようじ商会</a></footer>
 <script>
-const APP_VERSION='3.6.0-pilot';
+const APP_VERSION='3.6.1-pilot';
 const SITE_URL='https://kanjiki.github.io/coc-player-type/';
 const GAS_API_URL='https://script.google.com/macros/s/AKfycbxpLJ0yHbtepDPN4psF2YjcACxjlDosoeawcub04S1Fw8OlVNQe9ndYoj5sgrIDUpAW0g/exec';
 const QUESTIONS=[["卓への誘い","知人からCoCのセッションに誘われた。参加者やシナリオの詳細はまだ決まっていない。参加を考えるとき、一番知りたいのは？",["誰が参加して、どんな雰囲気の卓になりそうか。","どんな立場や関係性の探索者を作れそうか。","どの程度、自分で行動を試したり予定外に動けるシナリオか。","所要時間・難易度・主な目的がどのくらい明確か。"],[1,1,1,1]],["卓前のすり合わせ","初対面の人が多い卓。開始前に一つだけ確認できるなら？",["参加者がどんなノリや会話を好むか。","PC同士をどんな関係性にできそうか。","想定外の提案や寄り道をどこまで歓迎する卓か。","ルール運用や情報共有をどう進める卓か。"],[1,1,1,1]],["シナリオ選択","どれも同じくらい評判が良いシナリオから一つ選ぶ。最後の決め手は？",["このメンバーだからこそ盛り上がりそうなもの。","探索者として強く入り込める役柄や関係性があるもの。","選択や試行によって展開が変わりそうなもの。","推理・調査・戦闘など、考え応えのある課題がありそうなもの。"],[1,1,1,1]],["HOを握るなら","どのHOも設定の魅力は同じくらい。最後の決め手は？",["他PCとのやり取りが自然に多くなりそうなHO。","自分が演じたい人物像を深く掘れそうなHO。","行動や解釈の裁量が大きそうなHO。","自分の役割や得意分野がはっきりしそうなHO。"],[1,1,1,1]],["探索者作成","新しい探索者を作る。何を重視する？",["誰かと組んだときに会話や絡みが生まれやすい人物。","どんな人生を送り、何を大切にしている人物か。","こんな人物を作ったら卓でどうなるか。","技能や能力値を見て役立つ構成。"],[1,1,1,1]],["セッション開始","このシナリオでは探索者の行動にかなり自由度がある。",["このメンバーで好きに遊べることが楽しみ。","探索者が最も行いそうな行動を考える。","普段ならしない行動も選択肢に入れたい。","最もゴールに近づく行動を取る。"],[1,1,1,1]],["NPCとの会話","会話が続くが、事件に関係する情報はまだ出てこない。",["他のPLの反応を見ることも含めて楽しめる。","探索者ならどんな態度を取るか考える。","事件と関係のない話題まで広げてみる。","会話を整理して要点を聞きたい。"],[1,1,1,1]],["追加行動","一度だけ、通常より一回多く行動できるボーナスを得た。どこで使いたい？",["仲間との連携や、他PCの見せ場が広がる場面。","探索者らしい行動を最後まで通したい場面。","普段なら選ばない手段を試してみたい場面。","成功すれば局面が大きく有利になる場面。"],[1,1,1,1]],["発狂","あなたの探索者は発狂してしまった。",["他PLにも伝わりやすい発狂ロールプレイをする。","探索者に最もふさわしい発狂ロールプレイをする。","発狂を逆手に取り何かできないか考える。","速やかに精神分析を要求する。"],[1,1,1,1]],["偶然の失敗","重要な判定に失敗し、予想外の状況になった。まず気になるのは？",["その失敗に対して他のPLがどう反応するか。","探索者がその失敗をどう受け止めるか。","失敗で生まれた新しい状況を何に使えるか。","次はどうすれば成功率を上げられるか。"],[1,1,1,1]],["他PLの発言","別のPLがシリアスな場面で少し場違いな発言をした。",["その一言で卓全体の空気が変わるのも楽しい。","探索者ならどう受け取るか考える。","流れに乗って自分も軽い返しをしてみる。","その発言が場面や交渉にどう影響するか整理する。"],[1,1,1,1]],["戦闘の進め方","探索者たちは戦闘に突入した。何を一番意識する？",["仲間と声を掛け合いながら戦う流れ。","戦闘中も探索者らしい判断や台詞を通すこと。","地形・道具・技能を組み合わせて定石外の手を試すこと。","敵味方の状態を見て最も有効な行動を選ぶこと。"],[1,1,1,1]],["未知の装置","目的に関係ありそうな未知の装置を見つけた。説明は不十分で、触れば何か起きそうだ。",["皆で意見を出し合い、納得できる触り方を決める。","探索者の性格や知識なら触るかどうかで決める。","小さく試して反応を見ながら仕組みを探る。","周辺情報を集め、条件とリスクを整理してから動く。"],[1,1,1,1]],["探索中の寄り道","本筋とは関係なさそうな場所を見つけた。",["皆で見て回る時間も楽しそう。","探索者が興味を持つか考える。","関係がなさそうだからこそ寄り道したい。","残り時間から寄る価値を判断する。"],[1,1,1,1]],["KPの想定外","KPの想定していなかった方法で問題が解決した。何が一番面白い、または嬉しい？",["その『まさか』を皆で共有できたこと。","探索者の選択として自然に成立したこと。","予定外の結果から新しい選択肢が生まれたこと。","一つ課題を解決し、次へ進めるようになったこと。"],[1,1,1,1]],["危険な呪文","大きな代償を伴うが状況を打開できる呪文が見つかった。",["皆で使うかどうか相談する。","探索者なら代償込みで使うか判断する。","条件を変えられる部分がないか、試し方を考える。","成功率と代償を比較して実行する価値を判断する。"],[1,1,1,1]],["自由時間","予定より早く本筋が一段落し、30分ほど自由に使えることになった。何をしたい？",["PCやPL同士の会話・交流の時間にする。","探索者個人の気持ちや関係を掘り下げる場面をやる。","気になっていた場所や行動を試してみる。","未回収の情報や追加で解ける課題を確認する。"],[1,1,1,1]],["探索者の死","自分の探索者が瀕死になった。",["それすら楽しい思い出になると感じる。","死ぬ間際のロールプレイを考える。","最後に思い切ったことをしたい。","生存率を上げる手段を整理する。"],[1,1,1,1]],["セッション終了","セッションが終わった直後、最初に考えがちなのは？",["他の参加者とどの場面を話したいか。","探索者やNPCがこの後どうなるか。","選ばなかった手や別の分岐なら何が起きたか。","見落とした情報や、もっと良い解法がなかったか。"],[1,1,1,1]],["セッション後","感想を話している。",["PL会議が盛り上がったことを振り返る。","探索者の心情を振り返る。","予想外に転がった場面を振り返る。","別の判断ならもっと上手く進めたか考える。"],[1,1,1,1]],["次回の卓","同じくらい魅力的な卓が4つある。最後の決め手を一つだけ選ぶなら？",["気の合う人と一緒に遊べる。","強く演じてみたい探索者や関係性がある。","自分なりに試せる余地や予想外の展開が多い。","考えて突破する手応えのある課題がある。"],[1,1,1,1]],["最後に語るなら","セッションの面白さを一つだけ人に話すなら、何を話したくなる？",["卓のみんなとの掛け合いや空気。","探索者が何を感じ、どんな選択をしたか。","試したことから予想外の展開が生まれた場面。","情報をつなぎ、難しい状況を解決した過程。"],[1,1,1,1]]];
@@ -58,13 +58,57 @@ let index=0,answers=Array(22).fill(null),orders=[],resultData=null;const progres
 function el(id){return document.getElementById(id)}function show(id){['start','quiz','result'].forEach(x=>el(x).classList.toggle('hidden',x!==id))}
 function createSessionId(){try{if(crypto&&crypto.randomUUID)return crypto.randomUUID()}catch(e){}return 's_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,12)}let sessionId='';try{sessionId=sessionStorage.getItem('coc_diag_session_id')||'';if(!sessionId){sessionId=createSessionId();sessionStorage.setItem('coc_diag_session_id',sessionId)}}catch(e){sessionId=createSessionId()}
 function detectSource(){try{const src=new URLSearchParams(location.search).get('src');if(src==='x')return'x';if(!document.referrer)return'direct';const host=new URL(document.referrer).hostname.toLowerCase();if(host==='x.com'||host.endsWith('.x.com')||host==='twitter.com'||host.endsWith('.twitter.com')||host==='t.co')return'x';return'other'}catch(e){return document.referrer?'other':'direct'}}function deviceClass(){return/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||'')?'mobile':'desktop'}
-function postPayload(action,data,preferBeacon=false){const form=new URLSearchParams();form.set('payload',JSON.stringify({action,data}));const body=form.toString();if(preferBeacon&&navigator.sendBeacon){try{const ok=navigator.sendBeacon(GAS_API_URL,new Blob([body],{type:'application/x-www-form-urlencoded;charset=UTF-8'}));if(ok)return Promise.resolve(true)}catch(e){}}return fetch(GAS_API_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body,keepalive:true}).then(()=>true).catch(()=>false)}
+function postPayload(action,data,preferBeacon=false){
+  const form=new URLSearchParams();
+  form.set('payload',JSON.stringify({action,data}));
+  const body=form.toString();
+  if(preferBeacon&&navigator.sendBeacon){
+    try{
+      const ok=navigator.sendBeacon(GAS_API_URL,new Blob([body],{type:'application/x-www-form-urlencoded;charset=UTF-8'}));
+      if(ok)return Promise.resolve(true);
+    }catch(e){}
+  }
+  return fetch(GAS_API_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body,keepalive:true})
+    .then(()=>true)
+    .catch(()=>false);
+}
 function postToGas(action,data){return postPayload(action,data,false)}
-const FUNNEL_QUEUE_KEY='coc_diag_funnel_queue_v2';let funnelQueue=[],funnelFlushTimer=null;try{const saved=JSON.parse(localStorage.getItem(FUNNEL_QUEUE_KEY)||'[]');if(Array.isArray(saved))funnelQueue=saved.slice(-80)}catch(e){}
-function persistFunnelQueue(){try{localStorage.setItem(FUNNEL_QUEUE_KEY,JSON.stringify(funnelQueue.slice(-80)))}catch(e){}}
-function scheduleFunnelFlush(delay=600){if(funnelFlushTimer)return;funnelFlushTimer=setTimeout(()=>{funnelFlushTimer=null;flushFunnelQueue(false)},delay)}
-async function flushFunnelQueue(preferBeacon=false){if(!funnelQueue.length)return true;const batch=funnelQueue.splice(0,25);persistFunnelQueue();const ok=await postPayload('funnelBatch',batch,preferBeacon);if(!ok){funnelQueue=batch.concat(funnelQueue).slice(-80);persistFunnelQueue()}if(funnelQueue.length&&!preferBeacon)scheduleFunnelFlush(800);return ok}
-function logFunnel(event,extra={}){const item={appVersion:APP_VERSION,sessionId,event,source:detectSource(),type:resultData?resultData.type:'',questionIndex:extra.questionIndex==null?'':extra.questionIndex,shareMethod:extra.shareMethod||'',referrer:document.referrer||'',deviceClass:deviceClass(),success:typeof extra.success==='boolean'?extra.success:'',note:extra.note||'',clientTs:Date.now()};const once=['page_view','start','result_view','question_progress'];if(once.includes(event)){const key=event+'|'+(item.questionIndex||'');if(funnelQueue.some(x=>x&&x.sessionId===sessionId&&(x.event+'|'+(x.questionIndex||''))===key))return}funnelQueue.push(item);persistFunnelQueue();scheduleFunnelFlush(['page_view','start','result_view'].includes(event)?80:600)}
+const FUNNEL_QUEUE_KEY='coc_diag_funnel_queue_v3';
+const FUNNEL_CRITICAL_EVENTS=new Set(['page_view','start','question_progress','result_view']);
+let funnelQueue=[],funnelFlushTimer=null;
+try{
+  const saved=JSON.parse(localStorage.getItem(FUNNEL_QUEUE_KEY)||'[]');
+  if(Array.isArray(saved))funnelQueue=saved.slice(-120);
+}catch(e){}
+function persistFunnelQueue(){try{localStorage.setItem(FUNNEL_QUEUE_KEY,JSON.stringify(funnelQueue.slice(-120)))}catch(e){}}
+function scheduleFunnelFlush(delay=500){
+  if(funnelFlushTimer)return;
+  funnelFlushTimer=setTimeout(()=>{funnelFlushTimer=null;flushFunnelQueue(false)},delay);
+}
+async function flushFunnelQueue(preferBeacon=false){
+  if(!funnelQueue.length)return true;
+  const batch=funnelQueue.slice(0,25);
+  const ok=await postPayload('funnelBatch',batch,preferBeacon);
+  if(ok){
+    funnelQueue.splice(0,batch.length);
+    persistFunnelQueue();
+  }
+  if(funnelQueue.length&&!preferBeacon)scheduleFunnelFlush(ok?700:1500);
+  return ok;
+}
+function logFunnel(event,extra={}){
+  const item={appVersion:APP_VERSION,sessionId,event,source:detectSource(),type:resultData?resultData.type:'',questionIndex:extra.questionIndex==null?'':extra.questionIndex,shareMethod:extra.shareMethod||'',referrer:document.referrer||'',deviceClass:deviceClass(),success:typeof extra.success==='boolean'?extra.success:'',note:extra.note||'',clientTs:Date.now()};
+  if(FUNNEL_CRITICAL_EVENTS.has(event)){
+    const key=event+'|'+(item.questionIndex||'');
+    if(funnelQueue.some(x=>x&&x.sessionId===sessionId&&(x.event+'|'+(x.questionIndex||''))===key))return;
+    // Critical milestones use two independent delivery paths.
+    // GAS dedupe keeps successful duplicates to one row.
+    postPayload('funnel',item,false).catch(()=>false);
+  }
+  funnelQueue.push(item);
+  persistFunnelQueue();
+  scheduleFunnelFlush(FUNNEL_CRITICAL_EVENTS.has(event)?80:500);
+}
 function startDiagnosis(){index=0;answers=Array(22).fill(null);orders=QUESTIONS.map(q=>q[2].map((_,i)=>i).sort(()=>Math.random()-.5));progressLogged.clear();logFunnel('start');show('quiz');renderQuestion()}
 function renderQuestion(){const q=QUESTIONS[index];el('count').textContent='QUESTION '+(index+1)+' / 22';el('bar').style.width=((index+1)/22*100)+'%';el('question').textContent=q[0];el('scene').textContent=q[1];el('back').disabled=index===0;el('options').innerHTML='';orders[index].forEach(i=>{const b=document.createElement('button');b.className='option'+(answers[index]===i?' selected':'');b.textContent=q[2][i];b.onclick=()=>choose(i);el('options').appendChild(b)})}
 function choose(i){answers[index]=i;const n=index+1;if([5,10,15,20,22].includes(n)&&!progressLogged.has(n)){progressLogged.add(n);logFunnel('question_progress',{questionIndex:n})}if(index<21){index++;renderQuestion()}else finish()}function goBack(){if(index>0){index--;renderQuestion()}}
