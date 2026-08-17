@@ -1,0 +1,112 @@
+name: Fix funnel client reliability
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-funnel-client.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch funnel transport
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          files = [Path('index.html'), Path('v36/index.html')]
+
+          new_block = r'''function postPayload(action,data,preferBeacon=false){
+            const form=new URLSearchParams();
+            form.set('payload',JSON.stringify({action,data}));
+            const body=form.toString();
+            if(preferBeacon&&navigator.sendBeacon){
+              try{
+                const ok=navigator.sendBeacon(GAS_API_URL,new Blob([body],{type:'application/x-www-form-urlencoded;charset=UTF-8'}));
+                if(ok)return Promise.resolve(true);
+              }catch(e){}
+            }
+            return fetch(GAS_API_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body,keepalive:true})
+              .then(()=>true)
+              .catch(()=>false);
+          }
+          function postToGas(action,data){return postPayload(action,data,false)}
+          const FUNNEL_QUEUE_KEY='coc_diag_funnel_queue_v3';
+          const FUNNEL_CRITICAL_EVENTS=new Set(['page_view','start','question_progress','result_view']);
+          let funnelQueue=[],funnelFlushTimer=null;
+          try{
+            const saved=JSON.parse(localStorage.getItem(FUNNEL_QUEUE_KEY)||'[]');
+            if(Array.isArray(saved))funnelQueue=saved.slice(-120);
+          }catch(e){}
+          function persistFunnelQueue(){try{localStorage.setItem(FUNNEL_QUEUE_KEY,JSON.stringify(funnelQueue.slice(-120)))}catch(e){}}
+          function scheduleFunnelFlush(delay=500){
+            if(funnelFlushTimer)return;
+            funnelFlushTimer=setTimeout(()=>{funnelFlushTimer=null;flushFunnelQueue(false)},delay);
+          }
+          async function flushFunnelQueue(preferBeacon=false){
+            if(!funnelQueue.length)return true;
+            const batch=funnelQueue.slice(0,25);
+            const ok=await postPayload('funnelBatch',batch,preferBeacon);
+            if(ok){
+              funnelQueue.splice(0,batch.length);
+              persistFunnelQueue();
+            }
+            if(funnelQueue.length&&!preferBeacon)scheduleFunnelFlush(ok?700:1500);
+            return ok;
+          }
+          function logFunnel(event,extra={}){
+            const item={appVersion:APP_VERSION,sessionId,event,source:detectSource(),type:resultData?resultData.type:'',questionIndex:extra.questionIndex==null?'':extra.questionIndex,shareMethod:extra.shareMethod||'',referrer:document.referrer||'',deviceClass:deviceClass(),success:typeof extra.success==='boolean'?extra.success:'',note:extra.note||'',clientTs:Date.now()};
+            if(FUNNEL_CRITICAL_EVENTS.has(event)){
+              const key=event+'|'+(item.questionIndex||'');
+              if(funnelQueue.some(x=>x&&x.sessionId===sessionId&&(x.event+'|'+(x.questionIndex||''))===key))return;
+              // Critical milestones use two independent delivery paths.
+              // GAS dedupe keeps successful duplicates to one row.
+              postPayload('funnel',item,false).catch(()=>false);
+            }
+            funnelQueue.push(item);
+            persistFunnelQueue();
+            scheduleFunnelFlush(FUNNEL_CRITICAL_EVENTS.has(event)?80:500);
+          }'''
+
+          pattern = re.compile(r"function postPayload\(action,data,preferBeacon=false\)\{.*?function logFunnel\(event,extra=\{\}\)\{.*?\}\n(?=function startDiagnosis)", re.S)
+
+          for path in files:
+            text = path.read_text(encoding='utf-8')
+            text = text.replace("const APP_VERSION='3.6.0-pilot';", "const APP_VERSION='3.6.1-pilot';")
+            updated, n = pattern.subn(new_block + "\n", text, count=1)
+            if n != 1:
+              raise SystemExit(f'Could not patch funnel block in {path}; matches={n}')
+            path.write_text(updated, encoding='utf-8')
+            print(f'patched {path}')
+          PY
+
+      - name: Validate patch
+        shell: bash
+        run: |
+          grep -q "3.6.1-pilot" index.html
+          grep -q "FUNNEL_CRITICAL_EVENTS" index.html
+          grep -q "postPayload('funnel',item,false)" index.html
+          grep -q "3.6.1-pilot" v36/index.html
+          grep -q "FUNNEL_CRITICAL_EVENTS" v36/index.html
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html v36/index.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Fix funnel event delivery reliability"
+          git push
